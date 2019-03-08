@@ -40,7 +40,7 @@ REPORT
             -add caesar?
             -add transpositional?
             -add OTP?
-            -add ver-sdflkkj?
+            -add vigenere
 -confusion
     -did a slight change in the key make a big change in the ciphertext?
         -do a character distribution analysis before and after

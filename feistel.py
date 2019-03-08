@@ -1,20 +1,32 @@
 #!/usr/bin/python3.5
 
-import sys, argparse
+import sys, argparse, textwrap
 
 def function(i, k, r, length):
     #print("xoring: ", ((2*i*r)**k) % (10**(length+1)))
     return ((2*i*r)**k) % (10**(length))
+
+def create_iv(var):
+    length = len(str(abs(var)))
+    iv = 1
+
+    for i in range(0, length-1):
+        iv = iv * 10
+
+    print("iv",iv)
+    return iv
 
 def main(argv):
     l0 = 0
     r0 = 0
     l_old = 0
     r_old = 0
+    l_cipher = 0
+    r_cipher = 0
     l_new = 0
     r_new = 0
     k = 7
-    iterations = 9
+    iterations = 2
 
     plaintext = ''
     parser = argparse.ArgumentParser()
@@ -32,66 +44,115 @@ def main(argv):
         plaintext = file.read()
 
     if len(plaintext) % 2 != 0:
-        plaintext += ' '
+        plaintext.ljust(len(plaintext)+1,' ')
 
-    l0_string = plaintext[:int(len(plaintext)/2)]
-    r0_string = plaintext[int(len(plaintext)/2):]
+    num_of_blocks = 2
+    length = int(len(plaintext)/num_of_blocks)
+    start = 0
+    end = length
+    curr_block = ' '
 
-    l0 = int.from_bytes(l0_string.encode('utf-8'), byteorder='big')
-    r0 = int.from_bytes(r0_string.encode('utf-8'), byteorder='big')
+    #split into blocks for CBC/CTR
+    blocks = textwrap.wrap(plaintext, 2)
+    print(blocks)
 
-    print("number of digits:", len(str(abs(l0))))
-    length = len(str(abs(l0)))
+    for i in range(0, len(blocks)):
+        #split block
+        curr_block = blocks[i]
+        l = blocks[i][:1]
+        print(l)
+        r = blocks[i][1:]
+        print(r)
 
-    print("plaintext")
-    print("l_plain = ", l0_string)
-    print("r_plain = ", r0_string)
-    #print("l_inverse = ", int.to_bytes(l0, length=len(l0_string), byteorder='big').decode('utf-8'))
-    #print("r_inverse = ", int.to_bytes(r0, length=len(r0_string), byteorder='big').decode('utf-8'))
-    print("l_plain_int:", l0)
-    print("r_plain_int:", r0)
-    print()
+        if l == '':
+            l_int = ord(' ')
+        else:
+            l_int = ord(l)
+        print(l_int)
 
-    l_old = l0
-    r_old = r0
+        if r == '':
+            r_int = ord(' ')
+        else:
+            r_int = ord(r)
+        print(r_int)
 
-    #encrypt
-    for i in range(1, iterations):
-        l_new = r_old
-        #r_new = xor(f(r_old, k), l)
-        #r_new = (((2*i*k)*r_old) % 15) ^ l_old
-        print("xoring: ", function(i, k, r_old, length), "^", l_old)
-        r_new = function(i, k, r_old, length) ^ l_old
+        #xor with IV
+        if(i == 0):
+            l_int_xor = create_iv(l_int) ^ l_int
+            r_int_xor = create_iv(r_int) ^ r_int
+        else:       #xor with last ciphertext
+            l_int_xor = l_cipher ^ l_int
+            r_int_xor = r_cipher & r_int
 
-        #update nanmes for next iteration
-        l_old = l_new
-        r_old = r_new
+        print(l_int_xor)
+        print(r_int_xor)
 
-        print("ciphertext")
-        '''
-        print("l_cipher = ", int.to_bytes(l_new, length=len(l0_string), byteorder='big').decode('utf-8'))
-        print("r_cipher = ", int.to_bytes(r_new, length=len(r0_string), byteorder='big').decode('utf-8'))
-        '''
-        print("l new:", l_new)
-        print("r new:", r_new)
-        print()
+        #open file to write ciphertext
+        cipher_file = open("results.txt", "w+")
+
+        #print("number of digits:", len(str(abs(l0))))
+        xor_length = len(str(abs(l_int_xor)))
+        print("xor_length:",xor_length)
+
+        l_old = l_int_xor
+        r_old = r_int_xor
+
+        #encrypt
+        for i in range(1, iterations):
+            l_new = r_old
+            print("xoring: ", function(i, k, r_old, xor_length), "^", l_old)
+            r_new = function(i, k, r_old, xor_length) ^ l_old
+
+            #update nanmes for next iteration
+            l_old = l_new
+            r_old = r_new
+
+            print("ciphertext")
+            print("l new:", l_new)
+            print("r new:", r_new)
+            print()
+
+        if(i != (len(blocks)-1)):
+            l_cipher = l_new
+            r_cipher = r_new
+        cipher_file.write(str(l_new))
+        cipher_file.write(str(r_new))
+        cipher_file.close()
+
+
+    #open file to write ciphertext
+    decrypted_file = open("decrypted_results.txt", "w+")
 
     #decrypt
-    for i in range(iterations-1, 0, -1):
-        r_new = l_old
-        print("xoring: ", function(i, k, r_new, length), "^", r_old)
-        l_new = function(i, k, r_new, length) ^ r_old
-        l_old = l_new
-        r_old = r_new
+    for i in range(len(blocks)-1, 0, -1):
+        for i in range(iterations-1,0 -1):
+            xor_length = len(str(abs(l_new)))
 
-        print("decrypted")
-        '''
-        print("l_decrypted = ", int.to_bytes(l_new, length=len(l0_string), byteorder='big').decode('utf-8'))
-        print("r_decrypted = ", int.to_bytes(r_new, length=len(r0_string), byteorder='big').decode('utf-8'))
-        '''
-        print("l new:", l_new)
-        print("r new:", r_new)
-        print()
+            r_new = l_old
+            print("xoring: ", function(i, k, r_new, xor_length), "^", r_old)
+            l_new = function(i, k, r_new, xor_length) ^ r_old
+            l_old = l_new
+            r_old = r_new
+
+            print("decrypted")
+            print("l new:", l_new)
+            print("r new:", r_new)
+            print()
+
+        l_int = l_new
+        r_int = r_new
+        if(i == 0):
+            l_int_xor = create_iv(l_int) ^ l_int
+            r_int_xor = create_iv(r_int) ^ r_int
+        else:       #xor with last ciphertext
+            l_int_xor = l_cipher ^ l_int
+            r_int_xor = r_cipher & r_int
+
+        decrypted_file.write(chr(l_int_xor))
+        decrypted_file.write(chr(r_int_xor))
+
+        #decrypted_file.write(int.to_bytes(l_new, length=len(l0_string), byteorder='big').decode('utf-8'))
+        #decrypted_file.write(int.to_bytes(r_new, length=len(r0_string), byteorder='big').decode('utf-8'))
 
 if __name__ == "__main__":
     main (sys.argv[1:])
