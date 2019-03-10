@@ -3,7 +3,6 @@
 import sys, argparse, textwrap, math
 
 def function(i, k, r, length):
-    #print("xoring: ", ((2*i*r)**k) % (10**(length+1)))
     return ((2*i*r)**k) % (10**(length))
 
 def create_iv(var):
@@ -16,50 +15,10 @@ def create_iv(var):
     print("iv",iv)
     return iv
 
-def main(argv):
-    l0 = 0
-    r0 = 0
-    l_old = 0
-    r_old = 0
-    l_cipher = 0
-    r_cipher = 0
-    l_new = 0
-    r_new = 0
-    k = 7
-    iterations = 2
-
-    plaintext = ''
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-f', action="store",dest="filename")
-    parser.add_argument('-m', action="store",dest="message")
-
-    if parser.parse_args().filename:
-        filename = str(parser.parse_args().filename)
-        file = open(filename)
-        plaintext = file.read()
-    elif parser.parse_args().message:
-        file = open('input.txt', 'w+')
-        file.write(parser.parse_args().message)
-        file = open('input.txt', 'r')
-        plaintext = file.read()
-
-    if len(plaintext) % 2 != 0:
-        plaintext.ljust(len(plaintext)+1,' ')
-
-    num_of_blocks = 2
-    length = int(len(plaintext)/num_of_blocks)
-    start = 0
-    end = length
-    curr_block = ' '
-
-
-    blocks = [''] * math.ceil((len(plaintext)/2))
-    
-    #open file to write ciphertext
-    cipher_file = open("results.txt", "w+")
-
-    #split into blocks for CBC/CTR
-    y = 0   #counter for blocks array
+#splits the plaintext into blocks of size 2 and pads the last block if only one char
+def split_blocks(plaintext):
+    blocks = [''] * math.ceil((len(plaintext)/2))   #holds the plaintext
+    y = 0                                           #counter for blocks array
 
     for x in range(0, len(plaintext)-1, 2):
         print("plain|x:", len(plaintext), y)
@@ -77,45 +36,58 @@ def main(argv):
         blocks[y] = plaintext[len(plaintext)-1]
         blocks[y] += ' '
 
-
-    #blocks = textwrap.wrap(plaintext, 2, replace_whitespace = False)
-
-    #fix any mistakes from textwrap (not registering spaces properly)
-        #and pad if there are an odd number of characters
-    '''
-    for x in range(len(blocks)):
-        if blocks[x][1:] == '':
-            blocks[x] += ' '
-            print("space found")
-    '''
-
-
     print("blocks:", blocks)
 
+    return blocks
+
+def main(argv):
+    l0 = 0
+    r0 = 0
+    l_old = 0
+    r_old = 0
+    l_new = 0
+    r_new = 0
+    k = 7
+    rounds = 2
+    plaintext = ''
+    cbc = False
+    ctr = False
+    iv = ord("a") #set default IV for first block
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', action="store",dest="filename")
+    parser.add_argument('-m', action="store",dest="message")
+    parser.add_argument('-b', action="store",dest="cbc")
+    parser.add_argument('-t', action="store",dest="ctr")
+
+    if parser.parse_args().filename:
+        filename = str(parser.parse_args().filename)
+        file = open(filename)
+        plaintext = file.read()
+    elif parser.parse_args().message:
+        file = open('input.txt', 'w+')
+        file.write(parser.parse_args().message)
+        file = open('input.txt', 'r')
+        plaintext = file.read()
+    elif parser.parse_args().cbc:
+        cbc = True
+    elif parser.parse_args().ctr:
+        ctr = True
+
+    #split into blocks for CBC/CTR
+    blocks = split_blocks(plaintext)
+
+    #holds the ciphertext
     blocks_cipher = [[0 for x in range(2)] for y in range(len(blocks))]
     print("blocks_cipher:", blocks_cipher)
 
-    
-    #set default IV for first block
-    iv = ord("a")
-    l_iv = iv
-    r_iv = iv
-
+    #start of CBC
     print("ENCRYPTING")
     print()
 
     #iterate through every block in plaintext (2 char each)
     for block_num in range(0, len(blocks)):
-        print("BLOCK", block_num, "--------")
-        print()
-
-        #set current block
-        curr_block = blocks[block_num]
-
-        if blocks[block_num][:1] == '':
-            blocks[block_num] += ' '
-        if blocks[block_num][1:] == '':
-            blocks[block_num] += ' '
+        print("BLOCK", block_num, "--------\n")
 
         #set left and right sides
         l = blocks[block_num][:1]
@@ -129,7 +101,6 @@ def main(argv):
         if block_num == 0:
             l_iv = iv
             r_iv = iv
-
 
         #xor left side with last left ciphertext
         l_int = ord(l) ^ l_iv
@@ -146,7 +117,7 @@ def main(argv):
         r_old = r_int
         
         #encrypt with function for ~8 rounds with the feistel cipher
-        for round_num in range(0, iterations):
+        for round_num in range(0, rounds):
             print("ROUND", round_num)
 
             #move r old to l new
@@ -179,13 +150,6 @@ def main(argv):
         else:
             print("Not setting new iv: ", l_iv, "|", r_iv)
 
-            
-    '''
-    cipher_file.write(str(l_new))
-    cipher_file.write(str(r_new))
-    cipher_file.close()
-    ''' 
-
     blocks_decrypt = [''] * len(blocks)
     
     #decrypt
@@ -206,7 +170,7 @@ def main(argv):
         print()
 
         #decrypt feistel cipher ~8 rounds
-        for round_num in range(iterations-1, 0-1, -1):
+        for round_num in range(rounds-1, 0-1, -1):
             print("ROUND", round_num)
 
             #r new is last round's l
