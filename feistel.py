@@ -1,6 +1,6 @@
 #!/usr/bin/python3.5
 
-import sys, argparse, textwrap
+import sys, argparse, textwrap, math
 
 def function(i, k, r, length):
     #print("xoring: ", ((2*i*r)**k) % (10**(length+1)))
@@ -52,107 +52,217 @@ def main(argv):
     end = length
     curr_block = ' '
 
+
+    blocks = [''] * math.ceil((len(plaintext)/2))
+    
+    #open file to write ciphertext
+    cipher_file = open("results.txt", "w+")
+
     #split into blocks for CBC/CTR
-    blocks = textwrap.wrap(plaintext, 2)
-    print(blocks)
+    y = 0   #counter for blocks array
 
-    for i in range(0, len(blocks)):
-        #split block
-        curr_block = blocks[i]
-        l = blocks[i][:1]
-        print(l)
-        r = blocks[i][1:]
-        print(r)
+    for x in range(0, len(plaintext)-1, 2):
+        print("plain|x:", len(plaintext), y)
+        blocks[y] = plaintext[x]
+        print("plaintext:", plaintext[x])
+        blocks[y] += plaintext[x+1]
+        print("plaintext:", plaintext[x+1])
+        y += 1
 
-        if l == '':
-            l_int = ord(' ')
-        else:
-            l_int = ord(l)
-        print(l_int)
+    #add last character
+        #and add white space if odd num of char
+    if len(plaintext) %2 == 1:
+        print("odd number of plaintext characters")
+        print("plaintext:", plaintext[len(plaintext)-1])
+        blocks[y] = plaintext[len(plaintext)-1]
+        blocks[y] += ' '
 
-        if r == '':
-            r_int = ord(' ')
-        else:
-            r_int = ord(r)
-        print(r_int)
 
-        #xor with IV
-        if(i == 0):
-            l_int_xor = create_iv(l_int) ^ l_int
-            r_int_xor = create_iv(r_int) ^ r_int
-        else:       #xor with last ciphertext
-            l_int_xor = l_cipher ^ l_int
-            r_int_xor = r_cipher & r_int
+    #blocks = textwrap.wrap(plaintext, 2, replace_whitespace = False)
 
-        print(l_int_xor)
-        print(r_int_xor)
+    #fix any mistakes from textwrap (not registering spaces properly)
+        #and pad if there are an odd number of characters
+    '''
+    for x in range(len(blocks)):
+        if blocks[x][1:] == '':
+            blocks[x] += ' '
+            print("space found")
+    '''
 
-        #open file to write ciphertext
-        cipher_file = open("results.txt", "w+")
 
-        #print("number of digits:", len(str(abs(l0))))
-        xor_length = len(str(abs(l_int_xor)))
-        print("xor_length:",xor_length)
+    print("blocks:", blocks)
 
-        l_old = l_int_xor
-        r_old = r_int_xor
+    blocks_cipher = [[0 for x in range(2)] for y in range(len(blocks))]
+    print("blocks_cipher:", blocks_cipher)
 
-        #encrypt
-        for i in range(1, iterations):
+    
+    #set default IV for first block
+    iv = ord("a")
+    l_iv = iv
+    r_iv = iv
+
+    print("ENCRYPTING")
+    print()
+
+    #iterate through every block in plaintext (2 char each)
+    for block_num in range(0, len(blocks)):
+        print("BLOCK", block_num, "--------")
+        print()
+
+        #set current block
+        curr_block = blocks[block_num]
+
+        if blocks[block_num][:1] == '':
+            blocks[block_num] += ' '
+        if blocks[block_num][1:] == '':
+            blocks[block_num] += ' '
+
+        #set left and right sides
+        l = blocks[block_num][:1]
+        r = blocks[block_num][1:]
+
+        print("l:", l, "(", ord(l), ")")
+        print("r:", r, "(", ord(r), ")")
+        print()
+
+        #set IV to default if first block, otherwise use last ciphertext and xor
+        if block_num == 0:
+            l_iv = iv
+            r_iv = iv
+
+
+        #xor left side with last left ciphertext
+        l_int = ord(l) ^ l_iv
+        #xor right side with last right ciphertext
+        r_int = ord(r) ^ r_iv
+
+        print("xoring plaintext and IV")
+        print("l ^ iv:", l_int)
+        print("r ^ iv:", r_int)
+        print()
+
+        #set values of the initial l and r sides
+        l_old = l_int
+        r_old = r_int
+        
+        #encrypt with function for ~8 rounds with the feistel cipher
+        for round_num in range(0, iterations):
+            print("ROUND", round_num)
+
+            #move r old to l new
             l_new = r_old
-            print("xoring: ", function(i, k, r_old, xor_length), "^", l_old)
-            r_new = function(i, k, r_old, xor_length) ^ l_old
+
+            #find length of r
+            xor_length = len(str(abs(r_old)))
+            
+            #xor l old with f(r old, k)
+            r_new = function(round_num, k, r_old, xor_length) ^ l_old
+
+            print("encrypting")
+            print("l_new:", l_new)
+            print("r_new:", r_new)
+            print()
 
             #update nanmes for next iteration
             l_old = l_new
             r_old = r_new
 
-            print("ciphertext")
+        blocks_cipher[block_num][0] = l_new
+        blocks_cipher[block_num][1] = r_new
+        print("blocks_cipher:", blocks_cipher)
+
+        #set next ciphertext block
+        if(block_num < (len(blocks) - 1)):
+            l_iv = l_new
+            r_iv = r_new
+            print("Set new iv: ", l_iv, "|", r_iv)
+        else:
+            print("Not setting new iv: ", l_iv, "|", r_iv)
+
+            
+    '''
+    cipher_file.write(str(l_new))
+    cipher_file.write(str(r_new))
+    cipher_file.close()
+    ''' 
+
+    blocks_decrypt = [''] * len(blocks)
+    
+    #decrypt
+    print("========DECRYPTING========")
+    print()
+
+    #iterate through every block in ciphertext
+    for block_num in range(len(blocks)-1, 0-1, -1):
+        print("BLOCK", block_num, "--------")
+        print()
+
+        l_old = blocks_cipher[block_num][0]
+        r_old = blocks_cipher[block_num][1]
+
+        #print original ints
+        print("l:", l_old)
+        print("r:", r_old)
+        print()
+
+        #decrypt feistel cipher ~8 rounds
+        for round_num in range(iterations-1, 0-1, -1):
+            print("ROUND", round_num)
+
+            #r new is last round's l
+            r_new = l_old
+            
+            #find length of l
+            xor_length = len(str(abs(r_new)))
+            
+            #xor r old with f(r new, k)
+            l_new = function(round_num, k, r_new, xor_length) ^ r_old
+            
+            print("decrypting function xor r_old")
             print("l new:", l_new)
             print("r new:", r_new)
             print()
 
-        if(i != (len(blocks)-1)):
-            l_cipher = l_new
-            r_cipher = r_new
-        cipher_file.write(str(l_new))
-        cipher_file.write(str(r_new))
-        cipher_file.close()
-
-
-    #open file to write ciphertext
-    decrypted_file = open("decrypted_results.txt", "w+")
-
-    #decrypt
-    for i in range(len(blocks)-1, 0, -1):
-        for i in range(iterations-1,0 -1):
-            xor_length = len(str(abs(l_new)))
-
-            r_new = l_old
-            print("xoring: ", function(i, k, r_new, xor_length), "^", r_old)
-            l_new = function(i, k, r_new, xor_length) ^ r_old
+            #update names for next iteration
             l_old = l_new
             r_old = r_new
+        
+        #set IV to default if first block
+        if block_num == 0:
+            l_iv = iv
+            r_iv = iv
+            print("Using default iv:", l_iv, "|", r_iv)
+        else:
+            l_iv = blocks_cipher[block_num-1][0]
+            r_iv = blocks_cipher[block_num-1][1]
+            print("Set new iv:", l_iv, "|", r_iv)
 
-            print("decrypted")
-            print("l new:", l_new)
-            print("r new:", r_new)
-            print()
+        #xor left side with IV
+        l_new = l_new ^ l_iv
 
-        l_int = l_new
-        r_int = r_new
-        if(i == 0):
-            l_int_xor = create_iv(l_int) ^ l_int
-            r_int_xor = create_iv(r_int) ^ r_int
-        else:       #xor with last ciphertext
-            l_int_xor = l_cipher ^ l_int
-            r_int_xor = r_cipher & r_int
+        #xor right side with IV
+        r_new = r_new ^ r_iv
 
-        decrypted_file.write(chr(l_int_xor))
-        decrypted_file.write(chr(r_int_xor))
+        blocks_decrypt[block_num] = chr(l_new)
+        blocks_decrypt[block_num] += chr(r_new)
 
-        #decrypted_file.write(int.to_bytes(l_new, length=len(l0_string), byteorder='big').decode('utf-8'))
-        #decrypted_file.write(int.to_bytes(r_new, length=len(r0_string), byteorder='big').decode('utf-8'))
+        print("decrypted:")
+        print("l:", chr(l_new), "(", l_new, ")")
+        print("r:", chr(r_new), "(", r_new, ")")
+        print()
+
+    #remove padding if added earlier
+    if blocks_decrypt[len(blocks)-1][1:] == ' ':
+        blocks_decrypt[len(blocks)-1] = blocks_decrypt[len(blocks)-1][:1]
+
+    print("RESULTS:")
+    print(blocks_decrypt)
+
+    #write results to file
+    decrypted_file = open("decrypted_results.txt", "w+")
+    for x in range(len(blocks_decrypt)):
+        decrypted_file.write(blocks_decrypt[x])
+
 
 if __name__ == "__main__":
     main (sys.argv[1:])
