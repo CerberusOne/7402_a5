@@ -17,7 +17,7 @@ def create_iv(var):
 
 #splits the plaintext into blocks of size 2 and pads the last block if only one char
 def split_blocks(plaintext):
-    blocks = [''] * math.ceil((len(plaintext)/2))   #holds the plaintext
+    blocks = [''] * int(math.ceil((len(plaintext)/2)))   #holds the plaintext
     y = 0                                           #counter for blocks array
 
     for x in range(0, len(plaintext)-1, 2):
@@ -53,6 +53,7 @@ def main(argv):
     cbc = False
     ctr = False
     iv = ord("a") #set default IV for first block
+    counter = ord("b")
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', action="store",dest="filename")
@@ -89,33 +90,46 @@ def main(argv):
     for block_num in range(0, len(blocks)):
         print("BLOCK", block_num, "--------\n")
 
-        #set left and right sides
-        l = blocks[block_num][:1]
-        r = blocks[block_num][1:]
+        if parser.parse_args().cbc:
+            #set left and right sides
+            l = blocks[block_num][:1]
+            r = blocks[block_num][1:]
 
-        print("l:", l, "(", ord(l), ")")
-        print("r:", r, "(", ord(r), ")")
-        print()
+            print("l:", l, "(", ord(l), ")")
+            print("r:", r, "(", ord(r), ")")
+            print()
 
-        #set IV to default if first block, otherwise use last ciphertext and xor
-        if block_num == 0:
-            l_iv = iv
-            r_iv = iv
+            #set IV to default if first block, otherwise use last ciphertext and xor
+            if block_num == 0:
+                l_iv = iv
+                r_iv = iv
 
-        #xor left side with last left ciphertext
-        l_int = ord(l) ^ l_iv
-        #xor right side with last right ciphertext
-        r_int = ord(r) ^ r_iv
+            #xor left side with last left ciphertext
+            l_int = ord(l) ^ l_iv
+            #xor right side with last right ciphertext
+            r_int = ord(r) ^ r_iv
 
-        print("xoring plaintext and IV")
-        print("l ^ iv:", l_int)
-        print("r ^ iv:", r_int)
-        print()
+            print("xoring plaintext and IV")
+            print("l ^ iv:", l_int)
+            print("r ^ iv:", r_int)
+            print()
+    
+            #set values of the initial l and r sides
+            l_old = l_int
+            r_old = r_int
 
-        #set values of the initial l and r sides
-        l_old = l_int
-        r_old = r_int
-        
+        if parser.parse_args().ctr:
+            l_plain = ord(blocks[block_num][:1])
+            r_plain = ord(blocks[block_num][1:])
+            print("l-plaintext: (", l_plain, ")")
+            print("r-plaintext: (", r_plain, ")")
+            print()
+            l_old = iv
+            r_old = (counter + block_num)
+            print("l-IV: (", l_old, ")")
+            print("r-Counter+block_num: (", r_old, ")")
+            print()
+
         #encrypt with function for ~8 rounds with the feistel cipher
         for round_num in range(0, rounds):
             print("ROUND", round_num)
@@ -134,21 +148,25 @@ def main(argv):
             print("r_new:", r_new)
             print()
 
-            #update nanmes for next iteration
+            #update names for next iteration
             l_old = l_new
             r_old = r_new
 
+        if parser.parse_args().ctr:
+            l_new = l_new ^ l_plain
+            r_new = r_new ^ r_plain
         blocks_cipher[block_num][0] = l_new
         blocks_cipher[block_num][1] = r_new
         print("blocks_cipher:", blocks_cipher)
 
-        #set next ciphertext block
-        if(block_num < (len(blocks) - 1)):
-            l_iv = l_new
-            r_iv = r_new
-            print("Set new iv: ", l_iv, "|", r_iv)
-        else:
-            print("Not setting new iv: ", l_iv, "|", r_iv)
+        if parser.parse_args().cbc:
+            #set next ciphertext block
+            if(block_num < (len(blocks) - 1)):
+                l_iv = l_new
+                r_iv = r_new
+                print("Set new iv: ", l_iv, "|", r_iv)
+            else:
+                print("Not setting new iv: ", l_iv, "|", r_iv)
 
     blocks_decrypt = [''] * len(blocks)
     
@@ -161,9 +179,15 @@ def main(argv):
         print("BLOCK", block_num, "--------")
         print()
 
-        l_old = blocks_cipher[block_num][0]
-        r_old = blocks_cipher[block_num][1]
-
+        if parser.parse_args().cbc:
+            l_old = blocks_cipher[block_num][0]
+            r_old = blocks_cipher[block_num][1]
+        if parser.parse_args().ctr:
+            l_old = iv
+            r_old = (counter + block_num)
+            print("l-IV: (", l_old, ")")
+            print("r-Counter+block_num: (", r_old, ")")
+            print()
         #print original ints
         print("l:", l_old)
         print("r:", r_old)
@@ -190,22 +214,26 @@ def main(argv):
             #update names for next iteration
             l_old = l_new
             r_old = r_new
-        
-        #set IV to default if first block
-        if block_num == 0:
-            l_iv = iv
-            r_iv = iv
-            print("Using default iv:", l_iv, "|", r_iv)
-        else:
-            l_iv = blocks_cipher[block_num-1][0]
-            r_iv = blocks_cipher[block_num-1][1]
-            print("Set new iv:", l_iv, "|", r_iv)
 
-        #xor left side with IV
-        l_new = l_new ^ l_iv
+        if parser.parse_args().cbc:
+            #set IV to default if first block
+            if block_num == 0:
+                l_iv = iv
+                r_iv = iv
+                print("Using default iv:", l_iv, "|", r_iv)
+            else:
+                l_iv = blocks_cipher[block_num-1][0]
+                r_iv = blocks_cipher[block_num-1][1]
+                print("Set new iv:", l_iv, "|", r_iv)
 
-        #xor right side with IV
-        r_new = r_new ^ r_iv
+            #xor left side with IV
+            l_new = l_new ^ l_iv
+    
+            #xor right side with IV
+            r_new = r_new ^ r_iv
+        if parser.parse_args().ctr:
+            l_new = blocks_cipher[block_num][0] ^ l_new
+            r_new = blocks_cipher[block_num][1] ^ r_new
 
         blocks_decrypt[block_num] = chr(l_new)
         blocks_decrypt[block_num] += chr(r_new)
